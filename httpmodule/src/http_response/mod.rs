@@ -70,3 +70,21 @@ impl HttpResponse {
     }
     
 }
+
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    pub fn test_response_create(){
+        let mut response = HttpResponse::new(200);
+        response.add_header("Content-Type".to_string(), "text/plain".to_string())
+            .set_body("Hello, World!".to_string());
+
+        assert_eq!(response.status_code, 200);
+        assert_eq!(response.version, "HTTP/1.1");
+        assert_eq!(response.headers.get("Content-Type"), Some(&"text/plain".to_string()));
+        assert_eq!(response.body, "Hello, World!");
+    }
+}
