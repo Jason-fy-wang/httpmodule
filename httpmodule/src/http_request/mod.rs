@@ -61,7 +61,7 @@ impl HttpRequest {
 
     pub fn parse_body(&mut self, buf: &mut BufReader<&mut TcpStream>) {
         let length = self.headers.iter().find(|(key, _)| key.eq_ignore_ascii_case("Content-Length"))
-            .map(|(_,v)| v.parse::<usize>().ok()).unwrap();
+        .and_then(|(_,v)| v.parse::<usize>().ok());
 
         if let Some(len)  = length {
             if len > 0 {
