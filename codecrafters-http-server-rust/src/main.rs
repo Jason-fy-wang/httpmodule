@@ -28,17 +28,34 @@ fn api_code_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> s
     let version = route.query_params.get("version")
         .map(|s| s.as_str())
         .unwrap_or("1.0");    
-
+    let body = &route.request.body;
     let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nCode is: {}, version: {}!", code, version);
     stream.write_all(response.as_bytes())?;
     Ok(())
 }
+
+fn api_code_post_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
+    print!("route: {:?}", route);
+    let code = route.query_params.get("code")
+        .map(|s| s.as_str())
+        .unwrap_or("default");
+
+    let version = route.query_params.get("version")
+        .map(|s| s.as_str())
+        .unwrap_or("1.0");    
+    let body = &route.request.body;
+    let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nCode is: {}, version: {}, body: {}!", code, version, body);
+    stream.write_all(response.as_bytes())?;
+    Ok(())
+}
+
 
 fn build_router() -> httpmodule::Router {
     httpmodule::Router::new()
     .get("/", home_handler)
     .get("/api/v1/{message}", api_message_handler)
     .get("/api/v1/code", api_code_handler)
+    .post("/api/v1/code", api_code_post_handler)
 }
 
 fn main() {

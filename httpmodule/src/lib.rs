@@ -1,6 +1,8 @@
-use std::io::{BufReader, Lines, BufRead};
+use std::io::{BufRead, BufReader, Lines, Read};
 use std::net::TcpStream;
 use std::collections::HashMap;
+
+use bytes::Buf;
 
 #[derive(Debug)]
 pub struct HttpRequest {
@@ -25,8 +27,9 @@ impl HttpRequest {
         let version = splits.next().unwrap_or_else(|| {
             panic!("No version found in request line")
         }).to_string();
-        println!("path: {}", path);
+
         let (path, query_params) = Self::parse_path_and_query(&path).unwrap();
+
         HttpRequest {
             method,
             path,
@@ -41,7 +44,7 @@ impl HttpRequest {
         self.headers.push((key, value));
     }
 
-    pub fn parse_headers(&mut self, lines: &mut Lines<BufReader<&mut TcpStream>>) {
+    pub fn parse_headers(&mut self, lines: &mut Lines<&mut BufReader<&mut TcpStream>>) {
         while let Some(line) = lines.next() {
             let line = line.unwrap();
             if line.is_empty() {
@@ -50,6 +53,19 @@ impl HttpRequest {
             let mut parts = line.splitn(2, ':');
             if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
                 self.add_header(key.trim().to_string(), value.trim().to_string());
+            }
+        }
+    }
+
+    pub fn parse_body(&mut self, buf: &mut BufReader<&mut TcpStream>) {
+        let length = self.headers.iter().find(|(key, _)| key.eq_ignore_ascii_case("Content-Length"))
+            .map(|(_,v)| v.parse::<usize>().ok()).unwrap();
+
+        if let Some(len)  = length {
+            if len > 0 {
+                let mut buffer = vec![0u8; len];
+                buf.read(&mut buffer).unwrap();
+                self.body = String::from_utf8_lossy(&buffer).to_string();
             }
         }
     }
@@ -135,13 +151,14 @@ impl HttpResponse {
 }
 
 pub fn parse_http_request(stream:&mut TcpStream) -> HttpRequest {
-    let buf_reader: BufReader<&mut TcpStream> = BufReader::new(stream);
-    let mut lines = buf_reader.lines();
+    let mut buf_reader: BufReader<&mut TcpStream> = BufReader::new(stream);
+    let reader = buf_reader.by_ref();
+    let mut lines = reader.lines();
     let request_line = lines.next().unwrap().unwrap();
 
     let mut request = HttpRequest::new(request_line);
     request.parse_headers(&mut lines);
-
+    request.parse_body(reader);
     println!("method: {},\n path: {},\n version:{},\n headers:\n {}", request.method, request.path, request.version, request.headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join("\n"));
 
     request
@@ -155,9 +172,10 @@ pub fn handle_connection(mut stream: TcpStream, router: &Router)-> std::io::Resu
 
 
 #[derive(Debug, Clone)]
-pub struct RouteMatch {
+pub struct RouteMatch<'a> {
     pub path_params: HashMap<String,String>,
     pub query_params: HashMap<String, String>,
+    pub request: &'a HttpRequest,
 }
 
 pub type RouteHandler = fn(&RouteMatch, &mut TcpStream) -> std::io::Result<()>;
@@ -168,7 +186,6 @@ struct Route {
     pattern: String,
     handler: RouteHandler,
 }
-
 impl Route {
 
     pub fn new(method: &str, pattern: &str, handler: RouteHandler) -> Self {
@@ -192,7 +209,6 @@ impl Route {
         score
     }
 }
-
 pub struct Router {
     routes: Vec<Route>,
 }
@@ -223,10 +239,10 @@ impl Router {
     }
 
     pub fn handle(&self, request: &HttpRequest, stream: &mut TcpStream) -> std::io::Result<()> {
+
         for route in &self.routes {
             if route.method == request.method || route.method == "*" {
                 if let Some(route_match) = self.match_pattern(&route.pattern, &request){
-                    print!("matched route: {:?} with request: {:?}", route_match, request);
                     return (route.handler)(&route_match, stream);
                 }
             }
@@ -234,7 +250,7 @@ impl Router {
         Ok(())
     }
 
-    pub fn match_pattern(&self, pattern: &str, request: &HttpRequest) -> Option<RouteMatch> {
+    pub fn match_pattern<'a>(&self, pattern: &str, request: &'a HttpRequest) -> Option<RouteMatch<'a>> {
         let pattern_parts:Vec<&str> = pattern.split("/").collect();
         let path_parts:Vec<&str> = request.path.split("/").collect();
 
@@ -254,7 +270,8 @@ impl Router {
 
         Some(RouteMatch {
             path_params,
-            query_params: request.query_params.clone(),
+            query_params: HashMap::new(),
+            request: request,
         })
     }
 
