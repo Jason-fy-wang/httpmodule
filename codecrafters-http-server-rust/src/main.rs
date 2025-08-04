@@ -3,13 +3,13 @@ use std::io::{Write};
 
 use httpmodule;
 
-fn home_handler(_route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
+fn home_handler(_route: &httpmodule::router::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
     let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!";
     stream.write_all(response.as_bytes())?;
     Ok(())
 }
 
-fn api_message_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
+fn api_message_handler(route: &httpmodule::router::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
     let message = route.path_params.get("{message}")
         .map(|s| s.as_str())
         .unwrap_or("default");
@@ -19,7 +19,7 @@ fn api_message_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -
     Ok(())
 }
 
-fn api_code_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
+fn api_code_handler(route: &httpmodule::router::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
     print!("route: {:?}", route);
     let code = route.query_params.get("code")
         .map(|s| s.as_str())
@@ -34,7 +34,7 @@ fn api_code_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> s
     Ok(())
 }
 
-fn api_code_post_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
+fn api_code_post_handler(route: &httpmodule::router::RouteMatch, stream: &mut TcpStream) -> std::io::Result<()> {
     print!("route: {:?}", route);
     let code = route.query_params.get("code")
         .map(|s| s.as_str())
@@ -50,8 +50,8 @@ fn api_code_post_handler(route: &httpmodule::RouteMatch, stream: &mut TcpStream)
 }
 
 
-fn build_router() -> httpmodule::Router {
-    httpmodule::Router::new()
+fn build_router() -> httpmodule::router::Router {
+    httpmodule::router::Router::new()
     .get("/", home_handler)
     .get("/api/v1/{message}", api_message_handler)
     .get("/api/v1/code", api_code_handler)
